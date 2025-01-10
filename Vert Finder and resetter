@@ -1,0 +1,182 @@
+import bpy
+
+# Convert T/F to True/False for simplicity
+T = True
+F = False
+
+# Flag to determine the script mode: 'R' or 'F' (reset or finder)
+script_mode = 'F'  # Change to 'R' for reset and 'F' for finder
+
+# Flags are set up for T/F (True or False)
+
+# Flag to reset selected vertices to basis across all shape keys (T for True)
+reset_selected_verts_to_basis = T  # If T, and in Reset mode resets selected vertices across all shape keys
+select_moved_from_any_shape_key = T  # If T, and in Finder mode, find and select moved vertices from all shape keys (ignores lists)
+
+use_both_shape_key_lists = F  # If T, combine both shape_key_names_reset and shape_key_names_finder
+
+# Shape key names for different operations
+shape_key_names_reset = ["Joy", "Joy"]  # Shape key names for resetting
+shape_key_names_finder = ["Joy", "Joy"]  # Shape key names for finding moved vertices
+
+# Get the active object
+if bpy.context.active_object is None:
+    print("No active object.")
+else:
+    obj = bpy.context.active_object
+    print(f"Active Object: {obj.name}")
+
+    if obj.type != 'MESH':
+        print(f"Active object {obj.name} is not a mesh.")
+    else:
+        if obj.data.shape_keys is None:
+            print(f"Object {obj.name} has no shape keys.")
+        else:
+            shape_keys = obj.data.shape_keys
+            print(f"Shape Keys Found: {', '.join([key.name for key in shape_keys.key_blocks])}")
+
+            # Combine shape key names if the flag is set
+            shape_key_names_to_process = []
+            if use_both_shape_key_lists:
+                shape_key_names_to_process = shape_key_names_reset + shape_key_names_finder
+                print(f"Using both shape key lists: {shape_key_names_to_process}")
+            else:
+                # Only use the list for the current mode
+                if script_mode == 'R':  # Reset mode
+                    shape_key_names_to_process = shape_key_names_reset
+                elif script_mode == 'F':  # Finder mode
+                    shape_key_names_to_process = shape_key_names_finder
+
+            # Processing the shape keys based on the mode and flags
+            if script_mode == 'R':  # Reset functionality: reset selected vertices to Basis position
+                # Reset selected vertices to basis only if 'R' mode
+                if reset_selected_verts_to_basis:
+                    for shape_key_name in shape_key_names_to_process:
+                        active_shape_key = None
+                        for key in shape_keys.key_blocks:
+                            if key.name == shape_key_name:
+                                active_shape_key = key
+                                print(f"Found shape key: {key.name}")
+                                break
+
+                        if active_shape_key is None:
+                            print(f"Shape key '{shape_key_name}' not found.")
+                        else:
+                            # Proceed to modify the selected vertices of the found shape key
+                            print(f"Proceeding to modify the shape key: {active_shape_key.name}")
+
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            print("Switched to Edit Mode.")
+
+                            bpy.ops.object.mode_set(mode='OBJECT')
+                            selected_verts = [v for v in obj.data.vertices if v.select]
+                            print(f"Number of selected vertices: {len(selected_verts)}")
+
+                            if len(selected_verts) == 0:
+                                print("No vertices selected.")
+                            else:
+                                for vert in selected_verts:
+                                    basis_location = obj.data.vertices[vert.index].co.copy()
+                                    print(f"Basis location of vertex {vert.index}: {basis_location}")
+                                    active_shape_key.data[vert.index].co = basis_location
+                                    print(f"Vertex {vert.index} position reset to Basis: {basis_location}")
+
+                            bpy.ops.object.mode_set(mode='EDIT')
+                            print("Returned to Edit Mode.")
+                else:
+                    print("reset_selected_verts_to_basis flag is F in R mode. Skipping reset.")
+
+            elif script_mode == 'F':  # Finder functionality: Find and select moved vertices
+                # Select moved vertices across any shape key only if 'F' mode
+                if select_moved_from_any_shape_key:
+                    print("Checking moved vertices across all shape keys...")
+
+                    # Switch to Object Mode before deselecting all vertices
+                    bpy.ops.object.mode_set(mode='OBJECT')
+                    bpy.ops.object.select_all(action='DESELECT')
+                    moved_verts = []
+
+                    # Loop through all shape keys and check for moved vertices
+                    for key in shape_keys.key_blocks:
+                        # Compare each vertex with the basis shape key
+                        for vert in obj.data.vertices:
+                            basis_location = obj.data.vertices[vert.index].co
+                            shape_key_location = key.data[vert.index].co
+
+                            # Compare location to detect movement (tolerance threshold)
+                            if (basis_location - shape_key_location).length > 0.0001:
+                                moved_verts.append(vert)
+
+                    # Select all moved vertices from any shape key
+                    for vert in moved_verts:
+                        vert.select = True
+                        print(f"Vertex {vert.index} has moved. Selecting it.")
+
+                    if len(moved_verts) > 0:
+                        print(f"{len(moved_verts)} vertices have been moved and selected.")
+                    else:
+                        print("No vertices have been moved by any shape key.")
+                else:
+                    print("select_moved_from_any_shape_key flag is F in F mode. Skipping moved vertex check.")
+
+                # Find moved vertices in specific shape key(s)
+                for shape_key_name in shape_key_names_to_process:
+                    target_shape_key = None
+                    for key in shape_keys.key_blocks:
+                        if key.name == shape_key_name:
+                            target_shape_key = key
+                            print(f"Found shape key: {key.name}")
+                            break
+
+                    if target_shape_key is None:
+                        print(f"Shape key '{shape_key_name}' not found.")
+                    else:
+                        print(f"Proceeding to select vertices moved by the shape key: {target_shape_key.name}")
+
+                        bpy.ops.object.mode_set(mode='OBJECT')
+                        print("Switched to Object Mode.")
+
+                        # Deselect all vertices before checking for moved ones
+                        bpy.ops.object.select_all(action='DESELECT')
+                        moved_verts = []
+
+                        for vert in obj.data.vertices:
+                            basis_location = obj.data.vertices[vert.index].co
+                            shape_key_location = target_shape_key.data[vert.index].co
+
+                            # Compare location to detect movement (tolerance threshold)
+                            if (basis_location - shape_key_location).length > 0.0001:
+                                moved_verts.append(vert)
+
+                        # Select all moved vertices
+                        for vert in moved_verts:
+                            vert.select = True
+                            print(f"Vertex {vert.index} has moved. Selecting it.")
+
+                        if len(moved_verts) > 0:
+                            print(f"{len(moved_verts)} vertices have been moved and selected.")
+                        else:
+                            print("No vertices have been moved by the selected shape key.")
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                print("Returned to Edit Mode.")
+
+            # Check the reset flag for selected vertices across all shape keys
+            # Ensure this block only executes in 'R' mode
+            if script_mode == 'R' and reset_selected_verts_to_basis:
+                print("Resetting selected vertices to their basis positions across all shape keys.")
+                bpy.ops.object.mode_set(mode='OBJECT')
+
+                # Deselect all vertices before resetting
+                bpy.ops.object.select_all(action='DESELECT')
+
+                # Loop through only selected vertices and reset their positions
+                for vert in obj.data.vertices:
+                    if vert.select:  # Only process selected vertices
+                        basis_location = obj.data.vertices[vert.index].co.copy()
+                        print(f"Resetting selected vertex {vert.index} to Basis location: {basis_location}")
+                        for key in shape_keys.key_blocks:
+                            key.data[vert.index].co = basis_location  # Reset across all shape keys
+
+                bpy.ops.object.mode_set(mode='EDIT')
+                print("Returned to Edit Mode.")
