@@ -20,3 +20,4 @@ Blender reset deformation for certain vertices shape key
 Shape key restore vertex deformation to neutral Blender
 
 I think thats enough that if someone searches for something like this code they might find the code. 
+This Code was made by Chat GPT
